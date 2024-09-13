@@ -289,13 +289,17 @@ async def message_handler(event):
 
 async def main():
     # Start the Telethon client
+    print("Starting Telegram client...")
     await client.start(phone=phone_number)
-
-    # Run both the Aiogram bot and Telethon client concurrently
-    await asyncio.gather(
-        dp.start_polling(),           # Start Aiogram bot
-        client.run_until_disconnected()  # Keep Telethon running
-    )
+    print("Telegram client started.")
+    
+    # Start Aiogram bot polling
+    print("Starting Aiogram bot polling...")
+    await dp.start_polling()
+    print("Aiogram bot polling started.")
+    
+    # Keep the Telethon client running
+    await client.run_until_disconnected()
 if __name__ == '__main__':
     # Ensure both Aiogram and Telethon share the same event loop
     asyncio.run(main())
