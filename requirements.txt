@@ -1,0 +1,6 @@
+aiogram==2.15
+aioredis==2.0.1
+sqlite3
+psycopg2
+telethon
+nltk

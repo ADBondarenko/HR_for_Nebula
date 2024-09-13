@@ -1,0 +1,13 @@
+version: '3.9'
+
+services:
+  telegram-bot:
+    build: ./app
+    environment:
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - PHONE_NUMBER=${PHONE_NUMBER}
+    volumes:
+      - ./data:/app/data   
+    restart: always
