@@ -4,6 +4,11 @@ FROM python:3.9-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# Install sqlite3 and any required build dependencies
+RUN apt-get update && \
+    apt-get install -y sqlite3 libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements.txt from the root directory of the project to the container's /app directory
 COPY /requirements.txt /app/requirements.txt
 
