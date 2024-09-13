@@ -5,11 +5,6 @@ services:
     build:
       context: ./            # Context is the root directory (since Dockerfile is inside 'app' folder)
       dockerfile: ./app/Dockerfile  # Dockerfile is inside the 'app' folder
-    environment:
-      - API_ID=${API_ID}
-      - API_HASH=${API_HASH}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - PHONE_NUMBER=${PHONE_NUMBER}
     volumes:
       - ./app:/app       # Mount the local 'app' directory to '/app' inside the container
       - telegram_data:/app/data
