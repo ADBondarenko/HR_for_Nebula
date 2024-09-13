@@ -16,7 +16,7 @@ api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
 phone_number = os.getenv("PHONE_NUMBER")
-
+port = int(os.getenv("PORT", 8443)) 
 config_file_path = './data/forward_chats.json'
 
 TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
@@ -300,9 +300,5 @@ if __name__ == '__main__':
     # Ensure both Aiogram and Telethon share the same event loop
     asyncio.run(main())
 
-
-if __name__ == '__main__':
-    # Ensure both Aiogram and Telethon share the same event loop
-    asyncio.run(main())
 
 
