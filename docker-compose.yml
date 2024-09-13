@@ -12,6 +12,9 @@ services:
       - PHONE_NUMBER=${PHONE_NUMBER}
     volumes:
       - ./app:/app       # Mount the local 'app' directory to '/app' inside the container
+      - telegram_data:/app/data
     ports:
       - "8443:8443"      # Optional, only if you need to expose a port
     restart: always
+volumes:
+  telegram_data:
