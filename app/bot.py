@@ -5,6 +5,11 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils import executor
 from nltk.stem import SnowballStemmer
+from dotenv import load_dotenv
+import asyncio
+
+# # Load environment variables from .env file
+# load_dotenv('.env.test')
 
 # Define your API credentials (get from my.telegram.org)
 api_id = os.getenv("API_ID")
@@ -12,48 +17,45 @@ api_hash = os.getenv("API_HASH")
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
 phone_number = os.getenv("PHONE_NUMBER")
 
-# Path to the JSON file that stores the list of chats and keywords (inside the Docker volume)
 config_file_path = './data/forward_chats.json'
 
-# Define the target groups (list of IDs or usernames) to which messages will be forwarded
-TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")  # Comma-separated list of target group IDs or usernames
+TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
 
-# Initialize the Telegram client (Telethon) and bot (Aiogram)
 client = TelegramClient('session_name', api_id, api_hash)
 bot = Bot(token=telegram_token)
 dp = Dispatcher(bot)
 
-# Initialize stemmers for English and Russian
 stemmer_english = SnowballStemmer("english")
 stemmer_russian = SnowballStemmer("russian")
 
-# Get the whitelisted user IDs from the environment variable
 whitelisted_ids = os.getenv("WHITELISTED_IDS", "")
 WHITELISTED_IDS = [int(user_id) for user_id in whitelisted_ids.split(",") if user_id.isdigit()]
 
-# Function to load chats and keywords from the JSON file
 def load_config():
     if os.path.exists(config_file_path):
         with open(config_file_path, 'r') as f:
-            data = json.load(f)
-            return data.get('chats', []), data.get('keywords', [])
+            try:
+                data = json.load(f)
+                return data.get('chats', []), data.get('keywords', [])
+            except json.JSONDecodeError:
+                print(f"Error decoding JSON from {config_file_path}")
+                return [], []
     else:
         print(f"Config file {config_file_path} not found.")
         return [], []
 
-# Function to save the chat and keyword lists to the JSON file
 def save_config(chats, keywords):
-    with open(config_file_path, 'w') as f:
-        json.dump({"chats": chats, "keywords": keywords}, f)
+    try:
+        with open(config_file_path, 'w') as f:
+            json.dump({"chats": chats, "keywords": keywords}, f, indent=4)
+    except Exception as e:
+        print(f"Error writing to JSON file {config_file_path}: {e}")
 
-# Load the chat and keyword list from the volume
 forward_chats, keywords = load_config()
 
-# Check if a user is whitelisted
 def is_whitelisted(user_id):
     return user_id in WHITELISTED_IDS
 
-# Command to display the welcome message with available commands
 @dp.message_handler(commands=['start', 'help'])
 async def send_welcome(message: types.Message):
     if not is_whitelisted(message.from_user.id):
@@ -72,7 +74,6 @@ async def send_welcome(message: types.Message):
         "/get_chat_id_from_group - Resolve a chat ID from a https://t.me/ link\n"
     )
 
-    # Buttons to manage chats and keywords
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(
         InlineKeyboardButton("Add Chat", callback_data='add_chat'),
@@ -87,22 +88,22 @@ async def send_welcome(message: types.Message):
 
     await message.reply(welcome_message, reply_markup=markup)
 
-# Get the chat ID of the current group
-@dp.message_handler(commands=['get_chat_id'])
-async def get_chat_id(message: types.Message):
-    chat_id = message.chat.id
-    await message.reply(f"The chat ID is: {chat_id}")
-
-# Get the chat ID from a https://t.me/xxxx link or @username
-async def get_chat_id_from_group(group_link):
+async def get_chat_id_from_group(input_text):
     try:
-        entity = await client.get_entity(group_link)
+        if input_text.startswith('https://t.me/'):
+            input_text = input_text.split('/')[-1]
+
+        if input_text.isdigit():
+            return int(input_text)
+
+        entity = await client.get_entity(input_text)
         return entity.id
+    except (UsernameNotOccupiedError, UsernameInvalidError):
+        return None
     except Exception as e:
-        print(f"Error resolving link: {e}")
+        print(f"Error resolving entity: {e}")
         return None
 
-# Callback handler for inline buttons
 @dp.callback_query_handler(lambda c: c.data)
 async def process_callback(callback_query: types.CallbackQuery):
     user_id = callback_query.from_user.id
@@ -113,17 +114,18 @@ async def process_callback(callback_query: types.CallbackQuery):
 
     chat_id = callback_query.from_user.id
 
-    # Handle chat management
     if callback_query.data == 'add_chat':
         await bot.send_message(chat_id, "Please send the chat ID, username, or https://t.me/ link to add:")
-        dp.register_message_handler(add_chat_step, state=None)
+        dp.register_message_handler(process_add_chat, state=None)
     elif callback_query.data == 'remove_chat':
         await bot.send_message(chat_id, "Please send the chat ID, @username, or https://t.me/ link to remove:")
-        dp.register_message_handler(remove_chat_step, state=None)
+        dp.register_message_handler(process_remove_chat, state=None)
     elif callback_query.data == 'list_chats':
-        await bot.send_message(chat_id, f"The following chats are being monitored:\n" + "\n".join(forward_chats))
-
-    # Handle keyword management
+        if forward_chats:
+            chat_list = "\n".join(forward_chats)
+            await bot.send_message(chat_id, f"The following chats are being monitored:\n{chat_list}")
+        else:
+            await bot.send_message(chat_id, "No chats are currently being monitored.")
     elif callback_query.data == 'add_keyword':
         await bot.send_message(chat_id, "Please send the keyword to add:")
         dp.register_message_handler(add_keyword_step, state=None)
@@ -131,98 +133,83 @@ async def process_callback(callback_query: types.CallbackQuery):
         await bot.send_message(chat_id, "Please send the keyword to remove:")
         dp.register_message_handler(remove_keyword_step, state=None)
     elif callback_query.data == 'list_keywords':
-        await bot.send_message(chat_id, f"The following keywords are being monitored:\n" + "\n".join(keywords))
-
-    # Get chat ID of the current group
+        if keywords:
+            keyword_list = "\n".join(keywords)
+            await bot.send_message(chat_id, f"The following keywords are being monitored:\n{keyword_list}")
+        else:
+            await bot.send_message(chat_id, "No keywords are currently being monitored.")
     elif callback_query.data == 'get_chat_id':
         await bot.send_message(chat_id, f"The current chat ID is: {chat_id}")
-
-    # Resolve chat ID from link
     elif callback_query.data == 'get_chat_id_from_group':
-        await bot.send_message(chat_id, "Please send the https://t.me/ link to resolve:")
+        await bot.send_message(chat_id, "Please send the https://t.me/ link or @username to resolve:")
         dp.register_message_handler(resolve_chat_id_step, state=None)
+    elif callback_query.data == 'back_to_menu':
+        await send_welcome(callback_query.message)
 
-# Handle adding a chat (resolve chat ID if a link or @username is provided)
-async def add_chat_step(message: types.Message):
-    if not is_whitelisted(message.from_user.id):
-        await message.reply("Access denied. You are not authorized to use this bot.")
-        return
+async def process_add_chat(message: types.Message):
+    input_text = message.text
+    chat_id = await get_chat_id_from_group(input_text)
 
-    chat_to_add = message.text
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton("Back to Main Menu", callback_data='back_to_menu'))
 
-    # Check if the input is a https://t.me/ link or @username and resolve the chat ID
-    if chat_to_add.startswith("https://t.me/") or chat_to_add.startswith("@"):
-        resolved_id = await get_chat_id_from_group(chat_to_add)
-        if resolved_id:
-            chat_to_add = str(resolved_id)
+    if chat_id:
+        if str(chat_id) not in forward_chats:
+            forward_chats.append(str(chat_id))
+            save_config(forward_chats, keywords)
+            await message.reply(f"Chat with ID {chat_id} has been added successfully.", reply_markup=markup)
         else:
-            await message.reply("Failed to resolve chat ID from the provided link or username.")
-            return
-
-    # Add the resolved or provided chat ID
-    if chat_to_add not in forward_chats:
-        forward_chats.append(chat_to_add)
-        save_config(forward_chats, keywords)
-        await message.reply(f"Chat {chat_to_add} has been added to the subscription list.")
+            await message.reply(f"Chat {chat_id} is already in the subscription list.", reply_markup=markup)
     else:
-        await message.reply(f"Chat {chat_to_add} is already in the subscription list.")
+        await message.reply("No valid chat ID, handle, or link was provided. Please try again.", reply_markup=markup)
 
-# Handle removing a chat (support for raw chat ID, @username, or https://t.me/ link)
-async def remove_chat_step(message: types.Message):
-    if not is_whitelisted(message.from_user.id):
-        await message.reply("Access denied. You are not authorized to use this bot.")
-        return
+    dp.unregister_message_handler(process_add_chat)
 
-    chat_to_remove = message.text
+async def process_remove_chat(message: types.Message):
+    input_text = message.text
+    chat_id = await get_chat_id_from_group(input_text)
 
-    # Check if the input is a https://t.me/ link or @username and resolve the chat ID
-    if chat_to_remove.startswith("https://t.me/") or chat_to_remove.startswith("@"):
-        resolved_id = await get_chat_id_from_group(chat_to_remove)
-        if resolved_id:
-            chat_to_remove = str(resolved_id)
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton("Back to Main Menu", callback_data='back_to_menu'))
+
+    if chat_id:
+        if str(chat_id) in forward_chats:
+            forward_chats.remove(str(chat_id))
+            save_config(forward_chats, keywords)
+            await message.reply(f"Chat with ID {chat_id} has been removed successfully.", reply_markup=markup)
         else:
-            await message.reply("Failed to resolve chat ID from the provided link or username.")
-            return
-
-    # Remove the resolved or provided chat ID
-    if chat_to_remove in forward_chats:
-        forward_chats.remove(chat_to_remove)
-        save_config(forward_chats, keywords)
-        await message.reply(f"Chat {chat_to_remove} has been removed from the subscription list.")
+            await message.reply(f"Chat {chat_id} is not in the subscription list.", reply_markup=markup)
     else:
-        await message.reply(f"Chat {chat_to_remove} is not in the subscription list.")
+        await message.reply("No valid chat ID, handle, or link was provided. Please try again.", reply_markup=markup)
 
-# Handle adding a keyword (with optional stemming)
+    dp.unregister_message_handler(process_remove_chat)
+
 async def add_keyword_step(message: types.Message):
-    if not is_whitelisted(message.from_user.id):
-        await message.reply("Access denied. You are not authorized to use this bot.")
-        return
-
     keyword_to_add = message.text.lower()
 
-    # Ask whether stemming should be applied (yes/no buttons)
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(InlineKeyboardButton("Yes", callback_data=f'stemming_yes_{keyword_to_add}'),
                InlineKeyboardButton("No", callback_data=f'stemming_no_{keyword_to_add}'))
 
     await message.reply(f"Do you want to apply stemming for the keyword '{keyword_to_add}'?", reply_markup=markup)
 
-# Handle keyword stemming based on user's selection
+    dp.unregister_message_handler(add_keyword_step)
+
 @dp.callback_query_handler(lambda c: c.data.startswith('stemming_'))
 async def process_stemming_choice(callback_query: types.CallbackQuery):
-    choice, keyword_to_add = callback_query.data.split('_')[1], callback_query.data.split('_')[2]
+    data_parts = callback_query.data.split('_')
+    choice = data_parts[1]
+    keyword_to_add = '_'.join(data_parts[2:])
     chat_id = callback_query.from_user.id
 
     if choice == 'yes':
-        # Detect language of the keyword and apply stemming
-        if all('а' <= c <= 'я' for c in keyword_to_add):  # If the word contains only Cyrillic characters
+        if all('а' <= c <= 'я' or c == 'ё' for c in keyword_to_add.lower()):
             stemmed_keyword = stemmer_russian.stem(keyword_to_add)
             language = 'Russian'
         else:
             stemmed_keyword = stemmer_english.stem(keyword_to_add)
             language = 'English'
 
-        # Add the base keyword and stemmed version
         if keyword_to_add not in keywords:
             keywords.append(keyword_to_add)
         if stemmed_keyword not in keywords:
@@ -231,83 +218,85 @@ async def process_stemming_choice(callback_query: types.CallbackQuery):
         save_config(forward_chats, keywords)
         await bot.send_message(chat_id, f"Keyword '{keyword_to_add}' and its stemmed version '{stemmed_keyword}' "
                                         f"({language}) have been added to the list.")
-
     else:
-        # Only add the base keyword without stemming
         if keyword_to_add not in keywords:
             keywords.append(keyword_to_add)
             save_config(forward_chats, keywords)
             await bot.send_message(chat_id, f"Keyword '{keyword_to_add}' has been added to the list without stemming.")
 
-# Handle removing a keyword
 async def remove_keyword_step(message: types.Message):
-    if not is_whitelisted(message.from_user.id):
-        await message.reply("Access denied. You are not authorized to use this bot.")
-        return
-
     keyword_to_remove = message.text.lower()
 
-    # Remove the base keyword
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton("Back to Main Menu", callback_data='back_to_menu'))
+
+    removed = False
+
     if keyword_to_remove in keywords:
         keywords.remove(keyword_to_remove)
-        await message.reply(f"Keyword '{keyword_to_remove}' has been removed from the list.")
-    
-    # Remove the stemmed version of the keyword
+        removed = True
+        await message.reply(f"Keyword '{keyword_to_remove}' has been removed from the list.", reply_markup=markup)
+
     stemmed_keyword_eng = stemmer_english.stem(keyword_to_remove)
     stemmed_keyword_rus = stemmer_russian.stem(keyword_to_remove)
     if stemmed_keyword_eng in keywords:
         keywords.remove(stemmed_keyword_eng)
-        await message.reply(f"Stemmed English keyword '{stemmed_keyword_eng}' has been removed from the list.")
+        removed = True
+        await message.reply(f"Stemmed English keyword '{stemmed_keyword_eng}' has been removed from the list.", reply_markup=markup)
     if stemmed_keyword_rus in keywords:
         keywords.remove(stemmed_keyword_rus)
-        await message.reply(f"Stemmed Russian keyword '{stemmed_keyword_rus}' has been removed from the list.")
+        removed = True
+        await message.reply(f"Stemmed Russian keyword '{stemmed_keyword_rus}' has been removed from the list.", reply_markup=markup)
+
+    if not removed:
+        await message.reply(f"Keyword '{keyword_to_remove}' not found in the list.", reply_markup=markup)
 
     save_config(forward_chats, keywords)
+    dp.unregister_message_handler(remove_keyword_step)
 
-# Handle resolving a chat ID from a https://t.me/ link or @username
 async def resolve_chat_id_step(message: types.Message):
-    if not is_whitelisted(message.from_user.id):
-        await message.reply("Access denied. You are not authorized to use this bot.")
-        return
-
     group_link = message.text
     resolved_id = await get_chat_id_from_group(group_link)
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton("Back to Main Menu", callback_data='back_to_menu'))
     if resolved_id:
-        await message.reply(f"The resolved chat ID is: {resolved_id}")
+        await message.reply(f"The resolved chat ID is: {resolved_id}", reply_markup=markup)
     else:
-        await message.reply("Failed to resolve chat ID from the provided link or username.")
+        await message.reply("Failed to resolve chat ID from the provided link or username.", reply_markup=markup)
 
-# Listen for messages in subscribed chats and forward them if they contain a keyword or a Telegram link
-@client.on(events.NewMessage(chats=forward_chats))
+    dp.unregister_message_handler(resolve_chat_id_step)
+
+@client.on(events.NewMessage)
 async def message_handler(event):
-    message_text = event.message.text.lower()
+    if forward_chats:
+        chat_id = str(event.chat_id)
+        if chat_id in forward_chats:
+            if event.message.text:
+                message_text = event.message.text.lower()
 
-    # Forward message if it contains a keyword
-    for keyword in keywords:
-        if keyword in message_text:
-            sender = await event.get_sender()
-            sender_name = sender.username if sender.username else sender.first_name
-            print(f"Keyword '{keyword}' found in message from {sender_name}: {event.message.text}")
+                for keyword in keywords:
+                    if keyword in message_text:
+                        sender = await event.get_sender()
+                        sender_name = sender.username if sender.username else sender.first_name
+                        print(f"Keyword '{keyword}' found in message from {sender_name}: {event.message.text}")
 
-            # Forward the message to all target groups
-            for group_id in TARGET_GROUP_IDS:
-                await client.forward_messages(group_id.strip(), event.message)
-                print(f"Message forwarded to {group_id}")
+                        for group_id in TARGET_GROUP_IDS:
+                            if group_id.strip():
+                                await client.forward_messages(group_id.strip(), event.message)
+                                print(f"Message forwarded to {group_id}")
 
 async def main():
     # Start the Telethon client
     await client.start(phone=phone_number)
-    
-    # Notify when the client has started
-    print("Client started. Listening for messages and commands...")
-    
-    # Keep the client running to listen for events
+
+    # Start the Aiogram bot
+    await dp.start_polling()
+
+    # Keep the Telethon client running to listen for events
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    # Run the bot
-    executor.start_polling(dp, skip_updates=True)
+    # Ensure both Aiogram and Telethon share the same event loop
+    asyncio.run(main())
 
-    # Start the Telethon client and listen for new messages
-    with client:
-        client.loop.run_until_complete(main())
+

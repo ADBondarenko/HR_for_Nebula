@@ -1,2 +1,3 @@
 .ipynb_checkpoints/
 .env.test
+.DS_Store
