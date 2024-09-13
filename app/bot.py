@@ -285,15 +285,21 @@ async def message_handler(event):
                                 await client.forward_messages(group_id.strip(), event.message)
                                 print(f"Message forwarded to {group_id}")
 
+
+
 async def main():
     # Start the Telethon client
     await client.start(phone=phone_number)
 
-    # Start the Aiogram bot
-    await dp.start_polling()
+    # Run both the Aiogram bot and Telethon client concurrently
+    await asyncio.gather(
+        dp.start_polling(),           # Start Aiogram bot
+        client.run_until_disconnected()  # Keep Telethon running
+    )
+if __name__ == '__main__':
+    # Ensure both Aiogram and Telethon share the same event loop
+    asyncio.run(main())
 
-    # Keep the Telethon client running to listen for events
-    await client.run_until_disconnected()
 
 if __name__ == '__main__':
     # Ensure both Aiogram and Telethon share the same event loop
