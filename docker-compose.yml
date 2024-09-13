@@ -1,17 +1,17 @@
-version: '3.8'
+version: '3.9'
 
 services:
   telegram-bot:
     build:
-      context: ./app     
-      dockerfile: Dockerfile  
+      context: ./            # Context is the root directory (since Dockerfile is inside 'app' folder)
+      dockerfile: ./app/Dockerfile  # Dockerfile is inside the 'app' folder
     environment:
       - API_ID=${API_ID}
       - API_HASH=${API_HASH}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - PHONE_NUMBER=${PHONE_NUMBER}
     volumes:
-      - ./app:/app       # Mount the app directory to the container
+      - ./app:/app       # Mount the local 'app' directory to '/app' inside the container
     ports:
-      - "8443:8443"      # Optional: expose ports if necessary for webhook
+      - "8443:8443"      # Optional, only if you need to expose a port
     restart: always
