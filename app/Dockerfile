@@ -1,24 +1,18 @@
-# Use official Python image as base
+# Use an official Python runtime as a parent image
 FROM python:3.9-slim
 
-# Set working directory
-WORKDIR ./app
+# Set the working directory in the container
+WORKDIR /app
 
-# Copy requirements.txt and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the application code
+# Copy everything from the 'app' subdirectory in the local context to the '/app' directory in the container
 COPY . .
 
-# Set environment variables (will be overridden in production by Render environment)
-# ENV API_ID="your_api_id"
-# ENV API_HASH="your_api_hash"
-# ENV TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
-# ENV PHONE_NUMBER="your_phone_number"
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose the port for the bot (optional for development)
-# EXPOSE 8443
+# Make port 8443 available to the world outside this container (optional)
+EXPOSE 8443
 
-# Command to run the bot
+
+# Run bot.py when the container launches
 CMD ["python", "bot.py"]
