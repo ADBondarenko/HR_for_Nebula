@@ -16,6 +16,7 @@ api_hash = os.getenv("API_HASH")
 phone_number = os.getenv("PHONE_NUMBER")
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
 config_file_path = './data/forward_chats.json'
+session_string = os.getenv("SESSION_STRING")
 
 #Load target groups
 TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
@@ -29,7 +30,7 @@ whitelisted_ids = os.getenv("WHITELISTED_IDS", "")
 WHITELISTED_IDS = [int(user_id) for user_id in whitelisted_ids.split(",") if user_id.isdigit()]
 
 #Client authentification
-app = Client("my_session", session_string="/app/sessions/my_session.session", api_id=api_id, api_hash=api_hash)
+app = Client("my_session", session_string=session_string, api_id=api_id, api_hash=api_hash)
 bot = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=telegram_token)
 
 
