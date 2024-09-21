@@ -8,18 +8,14 @@ services:
     volumes:
       - ./app:/app       # Mount the local 'app' directory to '/app' inside the container
       - telegram_data:/app/data
+      - /var/data/sessions:/app/sessions
     ports:
       - "8443:8443"      # Optional, only if you need to expose a port
     restart: always
+      
+    restart: always
+    command: python bot_pyro.py  # Run the message forwarder service
+
 volumes:
   telegram_data:
 
-  message-forwarder:
-    build:
-      context: .
-    volumes:
-      - ./data:/app/data  # Persist data (optional, for session files)
-    restart: always
-    depends on: 
-      - telegram-bot
-    command: python forwarder.py  # Run the message forwarder service
