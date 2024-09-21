@@ -297,7 +297,6 @@ async def get_keywords(client, message):
 @app.on_message(filters.text)
 async def keyword_listener(client, message):
     chats, keywords = load_config()
-    
     if message.chat.id not in chats:
         return
     for keyword in keywords:  
@@ -307,8 +306,14 @@ async def keyword_listener(client, message):
 
 
 async def main():
-    await bot.start()
-    await app.start()
+    try:
+        await bot.start()
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+    try:
+        await app.start()
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
     
     await idle()
 if __name__ == "__main__":
