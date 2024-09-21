@@ -15,6 +15,10 @@ COPY /requirements.txt /app/requirements.txt
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+RUN mkdir -p /app/sessions
+
+COPY /var/data/sessions/session_name.session /app/sessions/
+
 # Copy everything from the 'app' directory (where the Dockerfile is) into the container's /app directory
 COPY ./app /app
 
@@ -22,4 +26,4 @@ COPY ./app /app
 EXPOSE 8443
 
 # Run bot.py when the container launches
-CMD ["python", "bot.py"]
+CMD ["python", "bot_pyro.py"]

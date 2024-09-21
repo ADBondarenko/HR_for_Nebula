@@ -5,3 +5,5 @@ telethon
 nltk
 python-dotenv
 asyncio
+pyrogram
+tgcrypto
