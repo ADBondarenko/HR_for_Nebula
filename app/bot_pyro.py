@@ -7,6 +7,7 @@ from pyrogram.handlers import MessageHandler
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
 import asyncio
+from pyrogram.errors import RPCError
 
 # Define your API credentials
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -47,20 +48,40 @@ def save_config(chats, keywords):
     with open(config_file_path, 'w') as f:
         json.dump({"chats": chats, "keywords": keywords}, f)
         
-forward_chats, keywords = load_config() 
+forward_chats, keywords = load_config()
 
-async def get_chat_id(username):
-    if re.search(r"https://t\.me/\+[\w\d]+", username):
-        chat = await app.get_chat(username)
-    match = re.search(r"https://t\.me/([^/]+)", username)
+def handle_telegram_url(url):
+    # If the URL is an invite link with the "+" format (used for private groups, new format)
+    if re.search(r"https://t\.me/\+[\w\d]+", url):
+        # Pass the new invite link format unchanged to client.get_chat
+        return url
+    
+    # If the URL is an old invite link with the "joinchat" format
+    if re.search(r"https://t\.me/joinchat/[\w\d]+", url) or re.search(r"https://telegram\.me/joinchat/[\w\d]+", url):
+        # Return the old invite link format unchanged
+        return url
+    
+    # If the URL is a public channel/group (strip to @username)
+    match = re.search(r"https://t\.me/([^/]+)", url)
     if match:
         username = match.group(1)
+        # Check if this is a public group or channel and return @username format
         if not username.startswith("joinchat") and not username.startswith("+"):
-            username = match.group(1)
-            chat = await app.get_chat(username)
-    else:
+            return f"@{username}"
+    
+    # If the URL does not match any known format, return None
+    return None
+    
+async def get_chat_id(username):
+    try: 
         chat = await app.get_chat(username)
-    return chat.id
+        return chat.id
+        
+    except RPCError as e:
+        await app.send_message("me", f"Error: Could not retrieve chat ID. Details: {str(e)}")
+    except Exception as e:
+        # Catch any other exceptions and send an error message
+        await app.send_message("me", f"Unexpected error occurred: {str(e)}")
     
 def is_authorized(user_id):
     return user_id in WHITELISTED_IDS
@@ -165,6 +186,9 @@ async def add_new_chat(client, message):
                     ''')
 
     chat_id = message.command[1]  # Get the chat ID from the command
+    chat_id = handle_telegram_url(chat_id)
+    chat_id = get_chat_id(chat_id)
+    
     chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
 
     if chat_id in chats:
@@ -272,7 +296,10 @@ async def get_keywords(client, message):
 #Client-based interactions    
 @app.on_message(filters.text)
 async def keyword_listener(client, message):
-    _, keywords = load_config()
+    chats, keywords = load_config()
+    
+    if message.chat.id not in chats:
+        return
     for keyword in keywords:  
         if keyword.lower() in message.text.lower():  # Check if keyword is in the message
             for target_chat in TARGET_GROUP_IDS:
