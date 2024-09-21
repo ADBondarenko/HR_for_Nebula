@@ -270,7 +270,7 @@ async def get_keywords(client, message):
 
 
 #Client-based interactions    
-@app.on_message(filters.chat & filters.text)
+@app.on_message(filters.text)
 async def keyword_listener(client, message):
     _, keywords = load_config()
     for keyword in keywords:  
