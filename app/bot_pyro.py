@@ -7,7 +7,7 @@ from pyrogram.handlers import MessageHandler
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
 import asyncio
-from pyrogram.errors import RPCError
+from pyrogram.errors import RPCError, FloodWait
 
 # Define your API credentials
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
