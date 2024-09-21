@@ -1,6 +1,6 @@
 import os
 import json
-from pyrogram import Client, idle
+from pyrogram import Client, idle, filters
 from pyrogram.handlers import MessageHandler
 # from nltk.stem import SnowballStemmer --YET TO BE IMPLEMENTED
 # from nltk import download --YET TO BE IMPLEMENTED
@@ -29,9 +29,9 @@ WHITELISTED_IDS = [int(user_id) for user_id in whitelisted_ids.split(",") if use
 
 #Client authentification
 app = Client("my_session", session_string="/app/sessions/my_session.session", api_id=api_id, api_hash=api_hash)
-bot = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=YOUR_BOT_TOKEN)
+bot = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=telegram_token)
 
-forward_chats, keywords = load_config()
+
 
 # Utils 
 def load_config():
@@ -47,6 +47,8 @@ def save_config(chats, keywords):
     with open(config_file_path, 'w') as f:
         json.dump({"chats": chats, "keywords": keywords}, f)
         
+forward_chats, keywords = load_config() 
+
 async def get_chat_id(username):
     if re.search(r"https://t\.me/\+[\w\d]+", username):
         chat = await app.get_chat(username)
@@ -145,19 +147,22 @@ async def start(client, message):
         await main_menu(client, message)
 
 @bot.on_message(filters.command("add_new_chat") & filters.private)
+async def add_new_chat(client, message):
     if not is_authorized(message.from_user.id):
-            await message.reply("You are not authorized to use this bot.")
-            return
-    await message.reply('''Please provide a chat ID in form of \n:
-                        https://t.me/+D3fL1dzv2WQwYTg0 join link for private groups \n
-                        @user or @channels for users and/or channels \n
-                        https://t.me/rbc_news or https://t.me/rbc_news/1 link for channels. \n
-                        Telegram-native IDs in form of -XXXXXXXXXXXX or -100XXXXXXXXXX can also be provided.                       
-                        '''
+        await message.reply("You are not authorized to use this bot.")
+        return
+    
     # Check if the user provided a chat ID as a command argument
     if len(message.command) < 2:
         await message.reply("Please provide a chat ID. Usage: /add_chat_id <chat_id>")
         return
+        
+    await message.reply('''Please provide a chat ID in form of \n:
+                    https://t.me/+D3fL1dzv2WQwYTg0 join link for private groups \n
+                    @user or @channels for users and/or channels \n
+                    https://t.me/rbc_news or https://t.me/rbc_news/1 link for channels. \n
+                    Telegram-native IDs in form of -XXXXXXXXXXXX or -100XXXXXXXXXX can also be provided.                       
+                    ''')
 
     chat_id = message.command[1]  # Get the chat ID from the command
     chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
@@ -166,7 +171,7 @@ async def start(client, message):
         await message.reply(f"Chat ID {chat_id} is already in the list.")
     else:
         chats.append(chat_id)   # Add the new chat ID
-        save_congfig(chats, keywords)    # Save the updated list to the JSON file
+        save_config(chats, keywords)    # Save the updated list to the JSON file
         await message.reply(f"Chat ID {chat_id} added successfully!")
 
 
@@ -188,8 +193,8 @@ async def add_keyword(client, message):
     if keyword in keywords:
         await message.reply(f"Chat ID {keyword} is already in the list.")
     else:
-        chats.append(chat_id)   # Add the new chat ID
-        save_congfig(chats, keywords)    # Save the updated list to the JSON file
+        keywords.append(keyword)   # Add the new chat ID
+        save_config(chats, keywords)    # Save the updated list to the JSON file
         await message.reply(f"Chat ID {keyword} added successfully!")
 
 @app.on_message(filters.command("delete_keyword") & filters.private)
@@ -267,9 +272,11 @@ async def get_keywords(client, message):
 #Client-based interactions    
 @app.on_message(filters.chat & filters.text)
 async def keyword_listener(client, message):
-    if KEYWORD.lower() in message.text.lower():  # Check if keyword is in the message
-        for target_chat in TARGET_GROUP_IDS:
-            await message.forward(target_chat)
+    _, keywords = load_config()
+    for keyword in keywords:  
+        if keyword.lower() in message.text.lower():  # Check if keyword is in the message
+            for target_chat in TARGET_GROUP_IDS:
+                await message.forward(target_chat)
 
 
 async def main():
