@@ -2,7 +2,7 @@ import os
 import json
 from pyrogram import Client, idle, filters
 from pyrogram.handlers import MessageHandler
-import loggging
+import logging
 # from nltk.stem import SnowballStemmer --YET TO BE IMPLEMENTED
 # from nltk import download --YET TO BE IMPLEMENTED
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
