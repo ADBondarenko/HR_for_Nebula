@@ -16,6 +16,21 @@ services:
     restart: always
     command: python bot_pyro.py  # Run the message forwarder service
 
+  telegram-forwarder:
+    build:
+      context: ./            # Context is the root directory (since Dockerfile is inside 'app' folder)
+    volumes:
+      - ./app:/app       # Mount the local 'app' directory to '/app' inside the container
+      - telegram_data:/app/data
+      - /var/data/sessions:/app/sessions
+    ports:
+      - "8443:8443"      # Optional, only if you need to expose a port
+    restart: always
+      
+    restart: always
+    command: python forwarder_pyro.py  # Run the message forwarder service
+
+
 volumes:
   telegram_data:
 

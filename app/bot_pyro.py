@@ -1,17 +1,13 @@
 import os
 import json
-from pyrogram import Client, idle, filters
-from pyrogram.handlers import MessageHandler
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 import logging
-# from nltk.stem import SnowballStemmer --YET TO BE IMPLEMENTED
-# from nltk import download --YET TO BE IMPLEMENTED
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
-import asyncio
-from pyrogram.errors import RPCError, FloodWait
+from pyrogram.errors import RPCError
 
-#Logging
-logging.basicConfig(filename='myapp.log', level=logging.DEBUG)
+# Logging
+logging.basicConfig(filename='bot_py.log', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -35,13 +31,11 @@ TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
 whitelisted_ids = os.getenv("WHITELISTED_IDS", "")
 WHITELISTED_IDS = [int(user_id) for user_id in whitelisted_ids.split(",") if user_id.isdigit()]
 
-#Client authentification
-app = Client("new_session", session_string=session_string, api_id=api_id, api_hash=api_hash)
+#Bot authentification
 bot = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=telegram_token)
 
 def log_handler_registration(handler_name):
     logger.debug(f"Handler '{handler_name}' has been registered.")
-
 
 # Utils 
 def load_config():
@@ -60,42 +54,54 @@ def save_config(chats, keywords):
 forward_chats, keywords = load_config()
 
 def handle_telegram_url(url):
-    # If the URL is an invite link with the "+" format (used for private groups, new format)
-    if re.search(r"https://t\.me/\+[\w\d]+", url):
-        # Pass the new invite link format unchanged to client.get_chat
+    url = url.strip()
+
+    # If the input is already in @username format
+    if url.startswith("@"):
         return url
-    
-    # If the URL is an old invite link with the "joinchat" format
-    if re.search(r"https://t\.me/joinchat/[\w\d]+", url) or re.search(r"https://telegram\.me/joinchat/[\w\d]+", url):
-        # Return the old invite link format unchanged
+
+    # If the input is a username without '@'
+    if re.match(r"^[\w\d_]{5,}$", url):
+        return f"@{url}"
+
+    # Normalize the URL by ensuring it starts with 'https://'
+    if not url.startswith("http"):
+        url = "https://" + url
+
+    # If the URL is an invite link with the '+' format (used for private groups, new format)
+    if re.match(r"https://(t|telegram)\.me/\+[\w\d]+", url):
         return url
-    
+
+    # If the URL is an old invite link with the 'joinchat' format
+    if re.match(r"https://(t|telegram)\.me/joinchat/[\w\d]+", url):
+        return url
+
     # If the URL is a public channel/group (strip to @username)
-    match = re.search(r"https://t\.me/([^/]+)", url)
+    match = re.match(r"https://(t|telegram)\.me/([^/]+)$", url)
     if match:
-        username = match.group(1)
-        # Check if this is a public group or channel and return @username format
+        username = match.group(2)
+        # Exclude 'joinchat' and '+' prefixes
         if not username.startswith("joinchat") and not username.startswith("+"):
             return f"@{username}"
-    
-    # If the URL does not match any known format, return None
+
+    # If none of the above, return None
     return None
-    
+
 async def get_chat_id(username):
     try: 
-        chat = await app.get_chat(username)
+        chat = await bot.get_chat(username)
         return chat.id
         
     except RPCError as e:
-        await app.send_message("me", f"Error: Could not retrieve chat ID. Details: {str(e)}")
+        await bot.send_message("me", f"Error: Could not retrieve chat ID. Details: {str(e)}")
     except Exception as e:
         # Catch any other exceptions and send an error message
-        await app.send_message("me", f"Unexpected error occurred: {str(e)}")
-    
+        await bot.send_message("me", f"Unexpected error occurred: {str(e)}")
+
 def is_authorized(user_id):
     return user_id in WHITELISTED_IDS
 
-#Bot menu and commands
+# Bot menu and commands
 async def main_menu(client, message):
     menu = InlineKeyboardMarkup(
         [
@@ -110,15 +116,16 @@ async def main_menu(client, message):
     
     # Send the main menu to the user
     await message.reply("Main Menu:", reply_markup=menu)
-# Callback query handler (for button clicks)
+
 # Function to handle the "Back to menu" action
 async def back_to_menu(client, callback_query):
     await callback_query.message.edit_text("Returning to the main menu...")
     await main_menu(client, callback_query.message)
 
-#Start command with authorization check (credintials are managed server-side)
+# Start command with authorization check
 @bot.on_message(filters.command("start"))
 async def start(client, message):
+    logger.debug("Command start received")
     if not is_authorized(message.from_user.id):
         await message.reply("You are not authorized to use this bot.")
         return
@@ -127,225 +134,209 @@ async def start(client, message):
         
 log_handler_registration("start")
 
-@bot.on_message(filters.command("add_new_chat") & filters.private)
-async def add_new_chat(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-    
-    # Check if the user provided a chat ID as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a chat ID. Usage: /add_chat_id <chat_id>")
-        return
-        
-    await message.reply('''Please provide a chat ID in form of \n:
-                    https://t.me/+D3fL1dzv2WQwYTg0 join link for private groups \n
-                    @user or @channels for users and/or channels \n
-                    https://t.me/rbc_news or https://t.me/rbc_news/1 link for channels. \n
-                    Telegram-native IDs in form of -XXXXXXXXXXXX or -100XXXXXXXXXX can also be provided.                       
-                    ''')
-
-    chat_id = message.command[1]  # Get the chat ID from the command
-    chat_id = handle_telegram_url(chat_id)
-    chat_id = get_chat_id(chat_id)
-    
-    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
-
-    if chat_id in chats:
-        await message.reply(f"Chat ID {chat_id} is already in the list.")
-    else:
-        chats.append(chat_id)   # Add the new chat ID
-        save_config(chats, keywords)    # Save the updated list to the JSON file
-        await message.reply(f"Chat ID {chat_id} added successfully!")
-        
-log_handler_registration("add_new_chat")
-
-
-# Command to add a keyword with a yes/no follow-up for stemmed version
-@bot.on_message(filters.command("add_keyword") & filters.private)
-async def add_keyword(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword. Usage: /add_keyword <keyword>")
-        return
-
-    keyword = message.command[1]  # Get the chat ID from the command
-    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
-
-    if keyword in keywords:
-        await message.reply(f"Chat ID {keyword} is already in the list.")
-    else:
-        keywords.append(keyword)   # Add the new chat ID
-        save_config(chats, keywords)    # Save the updated list to the JSON file
-        await message.reply(f"Chat ID {keyword} added successfully!")
-        
-log_handler_registration("add_keyword")
-
-@bot.on_message(filters.command("delete_keyword") & filters.private)
-async def delete_keyword(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
-        return
-
-    keyword = message.command[1]  # Get the keyword from the command
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if keyword not in keywords:
-        await message.reply(f"Keyword '{keyword}' is not in the list.")
-    else:
-        keywords.remove(keyword)  # Remove the keyword from the list
-        save_config(chats, keywords)  # Save the updated list to the JSON file
-        await message.reply(f"Keyword '{keyword}' deleted successfully!")
-        
-log_handler_registration("delete_keyword")
-
-@bot.on_message(filters.command("delete_chat") & filters.private)
-async def delete_chat(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
-        return
-
-    chat = message.command[1]  # Get the keyword from the command
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if chat not in chats:
-        await message.reply(f"Keyword '{chat}' is not in the list of active chats.")
-    else:
-        keywords.remove(keyword)  # Remove the keyword from the list
-        save_config(chats, keywords)  # Save the updated list to the JSON file
-        await message.reply(f"Keyword '{chat}' deleted successfully!")
-        
-log_handler_registration("delete_chat")
-
-@bot.on_message(filters.command("get_chats") & filters.private)
-async def get_chats(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if not chats:
-        await message.reply("No monitored chats found.")
-    else:
-        chat_list = "\n".join([str(chat) for chat in chats])
-        await message.reply(f"Monitored Chats:\n{chat_list}")
-        
-log_handler_registration("get_chats")     
-
-@bot.on_message(filters.command("get_keywords") & filters.private)
-async def get_keywords(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if not keywords:
-        await message.reply("No monitored keywords found.")
-    else:
-        keyword_list = "\n".join([str(keyword) for keyword in keywords])
-        await message.reply(f"Monitored Chats:\n{keyword_list}")
-
-log_handler_registration("get_keywords")
-
 # Callback query handler for button clicks
 @bot.on_callback_query()
 async def button_click(client, callback_query):
     data = callback_query.data
+    user_id = callback_query.from_user.id
 
     if data == "add_new_chat":
-        await callback_query.message.edit_text(
-            "Please provide a new chat to add:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
-            )
+        await callback_query.message.reply(
+            "Please provide a new chat to add (e.g., @username or a t.me link):",
+            reply_markup=ForceReply()
         )
+
     elif data == "get_chats":
+        chats, keywords = load_config()
+        if not chats:
+            text = "No monitored chats found."
+        else:
+            chat_list = "\n".join([f"ID: {chat['id']}, Prompt: {chat['prompt']}" for chat in chats])
+            text = f"Monitored Chats:\n{chat_list}"
         await callback_query.message.edit_text(
-            "List of chats currently monitored:",
+            text,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
             )
         )
+
     elif data == "delete_chat":
-        await callback_query.message.edit_text(
-            "Please provide a chat to delete:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
-            )
+        await callback_query.message.reply(
+            "Please provide a chat to delete (e.g., @username or a t.me link):",
+            reply_markup=ForceReply()
         )
 
     elif data == "add_new_keyword":
-        await callback_query.message.edit_text(
+        await callback_query.message.reply(
             "Please provide a keyword to add:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
-            )
+            reply_markup=ForceReply()
         )
+
     elif data == "delete_keyword":
-        await callback_query.message.edit_text(
+        await callback_query.message.reply(
             "Please provide a keyword to delete:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
-            )
+            reply_markup=ForceReply()
         )
+
     elif data == "get_keywords":
+        chats, keywords = load_config()
+        if not keywords:
+            text = "No monitored keywords found."
+        else:
+            keyword_list = "\n".join([str(keyword) for keyword in keywords])
+            text = f"Monitored Keywords:\n{keyword_list}"
         await callback_query.message.edit_text(
-            "List of currently active keywords:",
+            text,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Back to menu", callback_data="back_to_menu")]]
             )
         )
+
     elif data == "back_to_menu":
         await back_to_menu(client, callback_query)
         
 log_handler_registration("callbacks")
 
-
-#Client-based interactions    
-@app.on_message(filters.text)
-async def keyword_listener(client, message):
-    chats, keywords = load_config()
-    if message.chat.id not in chats:
+# Message handler to process user input based on replies
+@bot.on_message(filters.private & filters.reply)
+async def handle_private_reply(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
         return
-    for keyword in keywords:  
-        if keyword.lower() in message.text.lower():  # Check if keyword is in the message
+
+    if message.reply_to_message.from_user.is_bot:
+        prompt = message.reply_to_message.text
+        if "Please provide a new chat to add" in prompt:
+            await add_new_chat(client, message)
+        elif "Please provide a chat to delete" in prompt:
+            await delete_chat(client, message)
+        elif "Please provide a keyword to add" in prompt:
+            await add_keyword(client, message)
+        elif "Please provide a keyword to delete" in prompt:
+            await delete_keyword(client, message)
+        else:
+            await message.reply("Unrecognized action.")
+    else:
+        await message.reply("Please select an option from the menu.")
+        
+log_handler_registration("handle_private_reply")
+
+# Function to add a new chat
+async def add_new_chat(client, message):
+    logger.debug("Function add_new_chat called")
+    chat_id_input = message.text.strip()
+    chat_identifier = handle_telegram_url(chat_id_input)
+    if not chat_identifier:
+        await message.reply("Invalid chat ID or URL.")
+        await main_menu(client, message)
+        return
+
+    chat_id = await get_chat_id(chat_identifier)
+    if not chat_id:
+        await message.reply("Could not retrieve chat ID.")
+        await main_menu(client, message)
+        return
+
+    chats, keywords = load_config()
+
+    # Check if the chat is already in the list
+    if any(chat['id'] == chat_id for chat in chats):
+        await message.reply(f"Chat ID {chat_id} is already in the list.")
+    else:
+        chats.append({'id': chat_id, 'prompt': chat_id_input})
+        save_config(chats, keywords)
+        await message.reply(f"Chat ID {chat_id} added successfully!")
+
+    # Return to main menu
+    await main_menu(client, message)
+    
+log_handler_registration("add_new_chat")
+
+# Function to delete a chat
+async def delete_chat(client, message):
+    logger.debug("Function delete_chat called")
+    chat_id_input = message.text.strip()
+    chat_identifier = handle_telegram_url(chat_id_input)
+    if not chat_identifier:
+        await message.reply("Invalid chat ID or URL.")
+        await main_menu(client, message)
+        return
+
+    chat_id = await get_chat_id(chat_identifier)
+    if not chat_id:
+        await message.reply("Could not retrieve chat ID.")
+        await main_menu(client, message)
+        return
+
+    chats, keywords = load_config()
+
+    # Find the chat in the list
+    chat_to_remove = next((chat for chat in chats if chat['id'] == chat_id), None)
+
+    if not chat_to_remove:
+        await message.reply(f"Chat ID {chat_id} is not in the list.")
+    else:
+        chats.remove(chat_to_remove)
+        save_config(chats, keywords)
+        await message.reply(f"Chat ID {chat_id} deleted successfully!")
+
+    # Return to main menu
+    await main_menu(client, message)
+    
+log_handler_registration("delete_chat")
+
+# Function to add a keyword
+async def add_keyword(client, message):
+    logger.debug("Function add_keyword called")
+    keyword = message.text.strip()
+    chats, keywords = load_config()
+
+    if keyword in keywords:
+        await message.reply(f"Keyword '{keyword}' is already in the list.")
+    else:
+        keywords.append(keyword)
+        save_config(chats, keywords)
+        await message.reply(f"Keyword '{keyword}' added successfully!")
+
+    # Return to main menu
+    await main_menu(client, message)
+    
+log_handler_registration("add_keyword")
+
+# Function to delete a keyword
+async def delete_keyword(client, message):
+    logger.debug("Function delete_keyword called")
+    keyword = message.text.strip()
+    chats, keywords = load_config()
+
+    if keyword not in keywords:
+        await message.reply(f"Keyword '{keyword}' is not in the list.")
+    else:
+        keywords.remove(keyword)
+        save_config(chats, keywords)
+        await message.reply(f"Keyword '{keyword}' deleted successfully!")
+
+    # Return to main menu
+    await main_menu(client, message)
+    
+log_handler_registration("delete_keyword")
+
+# Function to monitor messages and forward based on keywords
+def monitored_chats_filter(_, __, message):
+    chats, _ = load_config()
+    chat_ids = [chat['id'] for chat in chats]
+    return message.chat.id in chat_ids
+
+@bot.on_message(filters.create(monitored_chats_filter) & filters.text)
+async def keyword_listener(client, message):
+    _, keywords = load_config()
+    if not keywords:
+        return
+    for keyword in keywords:
+        if keyword.lower() in message.text.lower():
             for target_chat in TARGET_GROUP_IDS:
                 await message.forward(target_chat)
                 
-log_handler_registration("app-listener")
+log_handler_registration("keyword_listener")
 
-async def main():
-    try:
-        await bot.start()
-        logger.debug("Bot has started")
-    except FloodWait as e:
-        logger.debug("Flood wait exception has been thrown")
-        logger.debug(f"Sleeping for {e.value} seconds")
-        await asyncio.sleep(e.value)
-    try:
-        await app.start()
-        logger.debug("App has started")
-    except FloodWait as e:
-        logger.debug("Flood wait exception has been thrown")
-        logger.debug(f"Sleeping for {e.value} seconds")
-        await asyncio.sleep(e.value)
-    
-    await idle()
-if __name__ == "__main__":
-    asyncio.run(main())
+bot.run()
