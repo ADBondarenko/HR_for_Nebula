@@ -9,15 +9,11 @@ from pyrogram.errors import RPCError
 
 
 # Define your API credentials
-telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-api_id = os.getenv("API_ID")
-api_hash = os.getenv("API_HASH")
-phone_number = os.getenv("PHONE_NUMBER")
-telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+telegram_token = "7859329027:AAF4zbBLSZSbXhDeYEH9dZMDkbOK7YhgXO4"
+api_id = "25873858"
+api_hash = "89b04d875bbeb3c96cc7c97957bbe231"
 config_file_path = './data/forward_chats.json'
-session_string = os.getenv("SESSION_STRING")
-#Load target groups
-TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
+session_string = ("BAGIaxsAkj7-5ujO6UFkcJXeeUEPB670VbwxBAUm_r-KOkuCNHT20_Mezbkh9-Dban-Yi4UroVPI0pEMMfDLMmjlcT8d4H4GKmTln7dZYukcptQoXPhTsWSmuxj1tcBYjbLnzi0TeutkpyYSPrPiI9CEu_j2f4jRS0ltvUUZ2bR071jlyHxcDCiyCRcVvlaZ_IRV6ksLwYl299xa7Mk7HBwcOzaDyk4AR2O2-7F9O6WraDH7RYOJj_arsETCClWPPIvHvwyOZbfDGRZcTCU0nbx6gLWKDEN3UNx4fjx3WN9NPARXHuvIeyVDLk6YaHdrVvFGPLNBzHsUn1zQM5ZX2dscRaYqKAAAAAGY3tYLAA==============================================")
 
 # Logging
 logging.basicConfig(filename='forwarder_py.log', level=logging.DEBUG)
@@ -38,7 +34,7 @@ def save_config(chats, keywords):
         json.dump({"chats": chats, "keywords": keywords}, f)
 
 #Сlient authentification
-app = Client("my_client", api_id=api_id, api_hash=api_hash, phone_number = phone_number)
+app = Client("my_client", api_id=api_id, api_hash=api_hash, session_string=telegram_token)
 
 
 
