@@ -2,12 +2,18 @@ import os
 import json
 from pyrogram import Client, idle, filters
 from pyrogram.handlers import MessageHandler
+import loggging
 # from nltk.stem import SnowballStemmer --YET TO BE IMPLEMENTED
 # from nltk import download --YET TO BE IMPLEMENTED
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
 import asyncio
 from pyrogram.errors import RPCError, FloodWait
+
+#Logging
+logging.basicConfig(filename='myapp.log', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 
 # Define your API credentials
 telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -30,9 +36,11 @@ whitelisted_ids = os.getenv("WHITELISTED_IDS", "")
 WHITELISTED_IDS = [int(user_id) for user_id in whitelisted_ids.split(",") if user_id.isdigit()]
 
 #Client authentification
-app = Client("my_session", session_string=session_string, api_id=api_id, api_hash=api_hash)
+app = Client("new_session", session_string=session_string, api_id=api_id, api_hash=api_hash)
 bot = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=telegram_token)
 
+def log_handler_registration(handler_name):
+    logger.debug(f"Handler '{handler_name}' has been registered.")
 
 
 # Utils 
@@ -108,6 +116,153 @@ async def back_to_menu(client, callback_query):
     await callback_query.message.edit_text("Returning to the main menu...")
     await main_menu(client, callback_query.message)
 
+#Start command with authorization check (credintials are managed server-side)
+@bot.on_message(filters.command("start"))
+async def start(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+    else:
+        await main_menu(client, message)
+        
+log_handler_registration("start")
+
+@bot.on_message(filters.command("add_new_chat") & filters.private)
+async def add_new_chat(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+    
+    # Check if the user provided a chat ID as a command argument
+    if len(message.command) < 2:
+        await message.reply("Please provide a chat ID. Usage: /add_chat_id <chat_id>")
+        return
+        
+    await message.reply('''Please provide a chat ID in form of \n:
+                    https://t.me/+D3fL1dzv2WQwYTg0 join link for private groups \n
+                    @user or @channels for users and/or channels \n
+                    https://t.me/rbc_news or https://t.me/rbc_news/1 link for channels. \n
+                    Telegram-native IDs in form of -XXXXXXXXXXXX or -100XXXXXXXXXX can also be provided.                       
+                    ''')
+
+    chat_id = message.command[1]  # Get the chat ID from the command
+    chat_id = handle_telegram_url(chat_id)
+    chat_id = get_chat_id(chat_id)
+    
+    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
+
+    if chat_id in chats:
+        await message.reply(f"Chat ID {chat_id} is already in the list.")
+    else:
+        chats.append(chat_id)   # Add the new chat ID
+        save_config(chats, keywords)    # Save the updated list to the JSON file
+        await message.reply(f"Chat ID {chat_id} added successfully!")
+        
+log_handler_registration("add_new_chat")
+
+
+# Command to add a keyword with a yes/no follow-up for stemmed version
+@bot.on_message(filters.command("add_keyword") & filters.private)
+async def add_keyword(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+
+    # Check if the user provided a keyword as a command argument
+    if len(message.command) < 2:
+        await message.reply("Please provide a keyword. Usage: /add_keyword <keyword>")
+        return
+
+    keyword = message.command[1]  # Get the chat ID from the command
+    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
+
+    if keyword in keywords:
+        await message.reply(f"Chat ID {keyword} is already in the list.")
+    else:
+        keywords.append(keyword)   # Add the new chat ID
+        save_config(chats, keywords)    # Save the updated list to the JSON file
+        await message.reply(f"Chat ID {keyword} added successfully!")
+        
+log_handler_registration("add_keyword")
+
+@bot.on_message(filters.command("delete_keyword") & filters.private)
+async def delete_keyword(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+
+    # Check if the user provided a keyword as a command argument
+    if len(message.command) < 2:
+        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
+        return
+
+    keyword = message.command[1]  # Get the keyword from the command
+    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
+
+    if keyword not in keywords:
+        await message.reply(f"Keyword '{keyword}' is not in the list.")
+    else:
+        keywords.remove(keyword)  # Remove the keyword from the list
+        save_config(chats, keywords)  # Save the updated list to the JSON file
+        await message.reply(f"Keyword '{keyword}' deleted successfully!")
+        
+log_handler_registration("delete_keyword")
+
+@bot.on_message(filters.command("delete_chat") & filters.private)
+async def delete_chat(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+
+    # Check if the user provided a keyword as a command argument
+    if len(message.command) < 2:
+        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
+        return
+
+    chat = message.command[1]  # Get the keyword from the command
+    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
+
+    if chat not in chats:
+        await message.reply(f"Keyword '{chat}' is not in the list of active chats.")
+    else:
+        keywords.remove(keyword)  # Remove the keyword from the list
+        save_config(chats, keywords)  # Save the updated list to the JSON file
+        await message.reply(f"Keyword '{chat}' deleted successfully!")
+        
+log_handler_registration("delete_chat")
+
+@bot.on_message(filters.command("get_chats") & filters.private)
+async def get_chats(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+
+    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
+
+    if not chats:
+        await message.reply("No monitored chats found.")
+    else:
+        chat_list = "\n".join([str(chat) for chat in chats])
+        await message.reply(f"Monitored Chats:\n{chat_list}")
+        
+log_handler_registration("get_chats")     
+
+@bot.on_message(filters.command("get_keywords") & filters.private)
+async def get_keywords(client, message):
+    if not is_authorized(message.from_user.id):
+        await message.reply("You are not authorized to use this bot.")
+        return
+
+    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
+
+    if not keywords:
+        await message.reply("No monitored keywords found.")
+    else:
+        keyword_list = "\n".join([str(keyword) for keyword in keywords])
+        await message.reply(f"Monitored Chats:\n{keyword_list}")
+
+log_handler_registration("get_keywords")
+
 # Callback query handler for button clicks
 @bot.on_callback_query()
 async def button_click(client, callback_query):
@@ -158,140 +313,8 @@ async def button_click(client, callback_query):
         )
     elif data == "back_to_menu":
         await back_to_menu(client, callback_query)
-
-#Start command with authorization check (credintials are managed server-side)
-@bot.on_message(filters.command("start"))
-async def start(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-    else:
-        await main_menu(client, message)
-
-@bot.on_message(filters.command("add_new_chat") & filters.private)
-async def add_new_chat(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-    
-    # Check if the user provided a chat ID as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a chat ID. Usage: /add_chat_id <chat_id>")
-        return
         
-    await message.reply('''Please provide a chat ID in form of \n:
-                    https://t.me/+D3fL1dzv2WQwYTg0 join link for private groups \n
-                    @user or @channels for users and/or channels \n
-                    https://t.me/rbc_news or https://t.me/rbc_news/1 link for channels. \n
-                    Telegram-native IDs in form of -XXXXXXXXXXXX or -100XXXXXXXXXX can also be provided.                       
-                    ''')
-
-    chat_id = message.command[1]  # Get the chat ID from the command
-    chat_id = handle_telegram_url(chat_id)
-    chat_id = get_chat_id(chat_id)
-    
-    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
-
-    if chat_id in chats:
-        await message.reply(f"Chat ID {chat_id} is already in the list.")
-    else:
-        chats.append(chat_id)   # Add the new chat ID
-        save_config(chats, keywords)    # Save the updated list to the JSON file
-        await message.reply(f"Chat ID {chat_id} added successfully!")
-
-
-# Command to add a keyword with a yes/no follow-up for stemmed version
-@app.on_message(filters.command("add_keyword") & filters.private)
-async def add_keyword(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword. Usage: /add_keyword <keyword>")
-        return
-
-    keyword = message.command[1]  # Get the chat ID from the command
-    chats, keywords = load_config()    # Load existing chat IDs from the JSON file!!!!!!!
-
-    if keyword in keywords:
-        await message.reply(f"Chat ID {keyword} is already in the list.")
-    else:
-        keywords.append(keyword)   # Add the new chat ID
-        save_config(chats, keywords)    # Save the updated list to the JSON file
-        await message.reply(f"Chat ID {keyword} added successfully!")
-
-@app.on_message(filters.command("delete_keyword") & filters.private)
-async def delete_keyword(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
-        return
-
-    keyword = message.command[1]  # Get the keyword from the command
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if keyword not in keywords:
-        await message.reply(f"Keyword '{keyword}' is not in the list.")
-    else:
-        keywords.remove(keyword)  # Remove the keyword from the list
-        save_config(chats, keywords)  # Save the updated list to the JSON file
-        await message.reply(f"Keyword '{keyword}' deleted successfully!")
-
-@app.on_message(filters.command("delete_chat") & filters.private)
-async def delete_chat(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    # Check if the user provided a keyword as a command argument
-    if len(message.command) < 2:
-        await message.reply("Please provide a keyword to delete. Usage: /delete_keyword <keyword>")
-        return
-
-    chat = message.command[1]  # Get the keyword from the command
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if chat not in chats:
-        await message.reply(f"Keyword '{chat}' is not in the list of active chats.")
-    else:
-        keywords.remove(keyword)  # Remove the keyword from the list
-        save_config(chats, keywords)  # Save the updated list to the JSON file
-        await message.reply(f"Keyword '{chat}' deleted successfully!")
-
-@app.on_message(filters.command("get_chats") & filters.private)
-async def get_chats(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if not chats:
-        await message.reply("No monitored chats found.")
-    else:
-        chat_list = "\n".join([str(chat) for chat in chats])
-        await message.reply(f"Monitored Chats:\n{chat_list}")
-        
-@app.on_message(filters.command("get_keywords") & filters.private)
-async def get_keywords(client, message):
-    if not is_authorized(message.from_user.id):
-        await message.reply("You are not authorized to use this bot.")
-        return
-
-    chats, keywords = load_config()    # Load existing chats and keywords from the JSON file
-
-    if not keywords:
-        await message.reply("No monitored keywords found.")
-    else:
-        keyword_list = "\n".join([str(keyword) for keyword in keywords])
-        await message.reply(f"Monitored Chats:\n{keyword_list}")
-
+log_handler_registration("callbacks")
 
 
 #Client-based interactions    
@@ -304,16 +327,23 @@ async def keyword_listener(client, message):
         if keyword.lower() in message.text.lower():  # Check if keyword is in the message
             for target_chat in TARGET_GROUP_IDS:
                 await message.forward(target_chat)
-
+                
+log_handler_registration("app-listener")
 
 async def main():
     try:
         await bot.start()
+        logger.debug("Bot has started")
     except FloodWait as e:
+        logger.debug("Flood wait exception has been thrown")
+        logger.debug(f"Sleeping for {e.value} seconds")
         await asyncio.sleep(e.value)
     try:
         await app.start()
+        logger.debug("App has started")
     except FloodWait as e:
+        logger.debug("Flood wait exception has been thrown")
+        logger.debug(f"Sleeping for {e.value} seconds")
         await asyncio.sleep(e.value)
     
     await idle()
