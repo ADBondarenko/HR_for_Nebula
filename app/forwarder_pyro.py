@@ -18,7 +18,7 @@ config_file_path = './data/forward_chats.json'
 session_string = os.getenv("SESSION_STRING")
 #Load target groups
 TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
-TARGET_GROU_IDS = [int(id) for id in TARGET_GROUP_IDS]
+TARGET_GROUP_IDS = [int(id) for id in TARGET_GROUP_IDS]
 
 # Logging
 logging.basicConfig(filename='forwarder_py.log', level=logging.DEBUG)
