@@ -45,6 +45,8 @@ app = Client("my_client", api_id=api_id, api_hash=api_hash, phone_number = phone
 #Client-based interactions    
 @app.on_message(filters.text)
 async def keyword_listener(client, message):
+    TARGET_GROUP_IDS = os.getenv("TARGET_GROUP_IDS", "").split(",")
+    TARGET_GROUP_IDS = [int(id) for id in TARGET_GROUP_IDS]
     chats, keywords = load_config()
     chat_list = [i['id'] for i in chats]
     if message.chat.id not in chat_list:
