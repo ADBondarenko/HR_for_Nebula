@@ -1,9 +1,4 @@
-aiogram==2.15
-aioredis==2.0.1
 # psycopg2
-telethon
-nltk
-python-dotenv
 asyncio
 pyrogram
 tgcrypto
