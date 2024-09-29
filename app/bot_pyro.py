@@ -321,22 +321,6 @@ async def delete_keyword(client, message):
     
 log_handler_registration("delete_keyword")
 
-# Function to monitor messages and forward based on keywords
-def monitored_chats_filter(_, __, message):
-    chats, _ = load_config()
-    chat_ids = [chat['id'] for chat in chats]
-    return message.chat.id in chat_ids
 
-@bot.on_message(filters.create(monitored_chats_filter) & filters.text)
-async def keyword_listener(client, message):
-    _, keywords = load_config()
-    if not keywords:
-        return
-    for keyword in keywords:
-        if keyword.lower() in message.text.lower():
-            for target_chat in TARGET_GROUP_IDS:
-                await message.forward(target_chat)
-                
-log_handler_registration("keyword_listener")
 
 bot.run()
