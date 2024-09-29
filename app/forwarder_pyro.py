@@ -55,7 +55,7 @@ async def keyword_listener(client, message):
         if keyword.lower() in message.text.lower():  # Check if keyword is in the message
             for target_chat in TARGET_GROUP_IDS:
                 try:
-                    logger.debug{f"Type of target_chat: {type(target_chat}, value : {target_chat}"}
+                    logger.debug({f"Type of target_chat: {type(target_chat}, value : {target_chat}"})
                     await message.forward(target_chat)
                     logger.debug(f"Message forwarded to chat ID: {target_chat}")
                 except PeerIdInvalid:
