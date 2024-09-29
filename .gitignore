@@ -12,3 +12,4 @@
 test_bot.py
 *.log
 *.session-journal
+forwarder_test.py
